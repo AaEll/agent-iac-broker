@@ -1,0 +1,49 @@
+name: ci
+
+# Every PR runs CI; merge stays blocked until this workflow is green.
+# Enable branch protection on `main` and require the `ci` check.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Ruff
+        run: ruff check .
+      - name: Unit tests
+        # The gate is a pure function: no network, no subprocess, no credential.
+        run: pytest -q
+
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    # The service's integration tests join this list at the next step; they run
+    # a fake `terraform` on PATH against a local git fixture, so they stay
+    # hermetic and belong in the same required check.
+    needs: [unit]
+    if: always()
+    steps:
+      - name: Require unit
+        run: |
+          echo "unit=${{ needs.unit.result }}"
+          test "${{ needs.unit.result }}" = "success"
