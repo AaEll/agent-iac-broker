@@ -1,9 +1,11 @@
 [project]
 name = "agent-iac-broker"
 version = "0.0.0"
-description = "Policy-and-cost gated Terraform apply task for agentic systems (Open Software Factory)."
+description = "Policy sets, cost gate, and Terraform modules for a gated infrastructure-apply pipeline (Open Software Factory)."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 dependencies = [
     "boto3>=1.34",
 ]

@@ -56,7 +56,7 @@ Atlantis API secret, which buys plan and apply and cannot override a gate.
 
 ### ② Atlantis — *adopted, not ours*
 
-The applier. Fetches the commit, plans it, runs the policy sets against the
+The applier. Fetches the named ref, plans it, runs the policy sets against the
 whole plan, and applies — one operation that trusts no caller. It holds the
 only credential in the system able to mutate infrastructure.
 

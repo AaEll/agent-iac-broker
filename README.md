@@ -4,8 +4,8 @@ The infrastructure-change plane for [Open Software Factory](https://github.com/A
 the policy sets, the cost gate, and the Terraform modules that stand up a
 gated-apply pipeline in a client's AWS environment.
 
-An agent proposes infrastructure by naming a commit. A broker fetches that
-commit, plans it, gates the whole plan, and applies it. The agent holds no
+An agent proposes infrastructure by naming a branch. A broker fetches that
+ref, plans it, gates the whole plan, and applies it. The agent holds no
 credential able to mutate anything.
 
 - **[architecture.md](docs/architecture.md)** — the five systems and their boundaries
@@ -102,3 +102,13 @@ Design and contracts are documented; implementation is in progress.
   post-apply steady state and cannot see usage-driven cost, data transfer, or
   per-request pricing.
 - **Rules are AWS-specific.** Resource type names are AWS provider names.
+
+## License
+
+[Apache-2.0](LICENSE). The `LICENSE` file is the license text verbatim,
+including its instructional appendix; the copyright holder line in that
+appendix is still to be filled in by the project owner.
+
+Atlantis is Apache-2.0 and OpenTofu is MPL-2.0, both of which this composes
+with. Terraform's BUSL-1.1 is deliberately avoided — see
+[architecture.md](docs/architecture.md).
