@@ -35,8 +35,17 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.push.outputs.digest }}
+      image: ${{ steps.name.outputs.image }}
     steps:
       - uses: actions/checkout@v4
+
+      # A container repository name must be lowercase, and the owner here is
+      # not. Actions has no lowercase expression function, so compute it.
+      - name: Compute the image name
+        id: name
+        run: |
+          owner_repo=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${owner_repo}/broker" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -53,7 +62,7 @@ jobs:
           context: .
           file: infra/docker/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/broker:${{ github.sha }}
+          tags: ${{ steps.name.outputs.image }}:${{ github.sha }}
           # The build runs `conftest verify` on the rule sets, so a broken
           # policy fails here rather than on the first production plan.
           provenance: false
@@ -64,7 +73,7 @@ jobs:
         run: |
           echo "### Broker image" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository }}/broker@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.name.outputs.image }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
   verify:
@@ -87,14 +96,14 @@ jobs:
       - name: The rule sets load and their own tests pass
         run: |
           docker run --rm --entrypoint conftest \
-            "ghcr.io/${{ github.repository }}/broker@${{ needs.build.outputs.digest }}" \
+            "${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}" \
             verify --policy /etc/osf/policies
 
       - name: The cost gate runs and refuses a missing estimate
         run: |
           set +e
           out=$(docker run --rm --entrypoint agent-iac-cost-gate \
-            "ghcr.io/${{ github.repository }}/broker@${{ needs.build.outputs.digest }}" \
+            "${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}" \
             --estimate /nonexistent.json --ceiling-usd 50)
           code=$?
           set -e
@@ -104,4 +113,4 @@ jobs:
       - name: OpenTofu is the distribution, not Terraform
         run: |
           docker run --rm --entrypoint tofu \
-            "ghcr.io/${{ github.repository }}/broker@${{ needs.build.outputs.digest }}" version
+            "${{ needs.build.outputs.image }}@${{ needs.build.outputs.digest }}" version
