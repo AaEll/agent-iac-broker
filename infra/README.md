@@ -111,11 +111,17 @@ once applied, so the bill is time-based rather than per-request:
 
 | Item | Driver |
 |---|---|
-| Fargate task | 1 vCPU / 2 GB, continuous while the service is up |
-| NAT gateway | Hourly, plus data. The largest line item by far |
+| Fargate task | 1 vCPU / 2 GB, continuous while the service is up. The main cost |
 | EFS | A few MB of Atlantis state |
 | Secrets Manager | Three secrets |
 | S3, DynamoDB | Negligible at trial volume |
+
+There is deliberately **no NAT gateway**. A created VPC gets public subnets and
+an internet gateway instead, because the tasks need egress and a NAT gateway is
+billed hourly whether or not anything runs. The exposure is narrow: the task
+security group has no ingress from outside itself, so a public address is an
+egress path rather than a way in. An injected-subnet deployment supplies
+subnets whose egress its own networking team owns.
 
 Destroy it when the question is answered:
 

@@ -218,7 +218,7 @@ resource "aws_ecs_service" "atlantis" {
   network_configuration {
     subnets          = local.subnet_ids
     security_groups  = [aws_security_group.tasks.id]
-    assign_public_ip = false
+    assign_public_ip = local.assign_public_ip
   }
 
   service_registries {

@@ -9,7 +9,19 @@ locals {
 
   create_vpc = var.network_mode == "create_vpc"
   vpc_id     = local.create_vpc ? aws_vpc.this[0].id : var.vpc_id
-  subnet_ids = local.create_vpc ? aws_subnet.private[*].id : var.subnet_ids
+  subnet_ids = local.create_vpc ? aws_subnet.public[*].id : var.subnet_ids
+
+  # A created VPC gets public subnets and an internet gateway rather than
+  # private subnets and a NAT gateway. The tasks need egress — to pull the
+  # image, reach the git forge, and reach the model endpoint — and a NAT
+  # gateway is billed hourly whether or not anything is running, which for a
+  # trial is the largest line item by far.
+  #
+  # The exposure this accepts is narrow: the task security group has no ingress
+  # from outside itself, so a public address is an egress path and not a way
+  # in. An injected-subnet deployment sets this differently by supplying
+  # subnets whose egress its own networking team owns.
+  assign_public_ip = local.create_vpc
 
   tags = merge(var.tags, {
     "osf:component"  = "control-plane"
@@ -51,14 +63,44 @@ resource "aws_vpc" "this" {
   }
 }
 
-resource "aws_subnet" "private" {
+resource "aws_subnet" "public" {
   count = local.create_vpc ? 2 : 0
 
-  vpc_id            = aws_vpc.this[0].id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index)
-  availability_zone = data.aws_availability_zones.available.names[count.index]
+  vpc_id                  = aws_vpc.this[0].id
+  cidr_block              = cidrsubnet(var.vpc_cidr, 4, count.index)
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
+  map_public_ip_on_launch = true
 
-  tags = merge(local.tags, { Name = "${var.name_prefix}-control-private-${count.index}" })
+  tags = merge(local.tags, { Name = "${var.name_prefix}-control-public-${count.index}" })
+}
+
+resource "aws_internet_gateway" "this" {
+  count = local.create_vpc ? 1 : 0
+
+  vpc_id = aws_vpc.this[0].id
+  tags   = merge(local.tags, { Name = "${var.name_prefix}-control" })
+}
+
+resource "aws_route_table" "public" {
+  count = local.create_vpc ? 1 : 0
+
+  vpc_id = aws_vpc.this[0].id
+  tags   = merge(local.tags, { Name = "${var.name_prefix}-control-public" })
+}
+
+resource "aws_route" "default" {
+  count = local.create_vpc ? 1 : 0
+
+  route_table_id         = aws_route_table.public[0].id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.this[0].id
+}
+
+resource "aws_route_table_association" "public" {
+  count = local.create_vpc ? 2 : 0
+
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public[0].id
 }
 
 # One security group for both task families. Egress only: nothing outside the
