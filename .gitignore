@@ -15,3 +15,5 @@ htmlcov/
 *.tfstate
 *.tfstate.*
 *.tfplan
+# Reusable modules do not pin provider versions; the root that calls them does.
+infra/terraform/modules/**/.terraform.lock.hcl

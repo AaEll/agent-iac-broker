@@ -10,6 +10,9 @@ dependencies = [
     "boto3>=1.34",
 ]
 
+[project.scripts]
+agent-iac-cost-gate = "agent_iac_broker.cost_gate:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",

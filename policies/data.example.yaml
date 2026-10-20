@@ -1,0 +1,21 @@
+# Deployment configuration for the policy sets, supplied as rego `data`.
+#
+# Every key defaults to empty or restrictive when absent, so an unconfigured
+# deployment refuses everything rather than admitting it. These are examples;
+# a real deployment's values are its own and belong in its Terragrunt inputs,
+# never in this repository.
+osf:
+  allowed_resource_types:
+    - aws_instance
+    - aws_s3_bucket
+    - aws_s3_bucket_acl
+    - aws_s3_bucket_public_access_block
+    - aws_security_group
+    - aws_security_group_rule
+    - aws_vpc_security_group_ingress_rule
+    - aws_db_instance
+  allowed_instance_families:
+    - t3
+    - m7i
+  admin_ports: [22, 3389]
+  refuse_delete: false
