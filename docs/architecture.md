@@ -116,10 +116,14 @@ conflict surface.
 
 The original design had the harness enforce the root-versus-subagent split with
 an in-process `delegationDepth` check. The spike found something better: the
-API surface registers only `plan` and `apply`, so **everything on it is equally
-and absolutely bounded** — no caller can override a policy failure. Override
-requires a human comment from an owner configured on the Atlantis server, which
-no agent holds.
+policy override is not reachable over the API, so **everything on that path is
+equally and absolutely bounded** — no caller can override a policy failure.
+Override requires a human comment from an owner configured on the Atlantis
+server, which no agent holds.
+
+That holds for the surface this design uses, and the surface is wider than it
+looks: drift remediation can apply, so it is left disabled. The inventory and
+the flags are in [contracts.md](contracts.md#the-rest-of-the-api-surface).
 
 The `delegationDepth` check is still mounted, because it refuses before a
 request leaves and keeps the refusal in the session log where it is auditable.

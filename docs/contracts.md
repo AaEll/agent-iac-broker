@@ -4,14 +4,18 @@ The surfaces that join the systems, and nothing else. A change to any of them
 is a change to a published contract: version it rather than reshaping a live
 one.
 
-Every shape below was observed from a running Atlantis 0.48.1 during the
-[evaluation spike](https://github.com/AaEll/OpenSoftwareFactory/blob/main/.agents/notes/proposed/architecture/2026-10-19-atlantis-evaluation-spike.md),
-not transcribed from documentation. Where a field is undocumented upstream but
-load-bearing for us, that is called out.
+Provenance is marked, because it differs by claim and conflating the two
+produced errors here before. Response **shapes** were observed from a running
+Atlantis 0.48.1 during the
+[evaluation spike](https://github.com/AaEll/OpenSoftwareFactory/blob/main/.agents/notes/proposed/architecture/2026-10-19-atlantis-evaluation-spike.md)
+and are pinned by the fixtures in `tests/fixtures/atlantis/`. The **request
+fields** and the **endpoint inventory** come from upstream documentation and are
+not all exercised by the spike — the spike only ever sent a branch ref. Where
+something is documented but unverified, it says so.
 
 ## Contents
 
-- [1. Harness → Atlantis](#1-harness--atlantis) — plan and apply
+- [1. Harness → Atlantis](#1-harness--atlantis) — plan, apply, and the rest of the surface
 - [2. Policy input](#2-policy-input) — what rego sees
 - [3. Cost gate step](#3-cost-gate-step) — the exit-code contract
 - [4. Outcome record](#4-outcome-record) — where the harness reads the verdict
@@ -22,9 +26,11 @@ load-bearing for us, that is called out.
 
 ## 1. Harness → Atlantis
 
-Two endpoints. Authentication is the `X-Atlantis-Token` header matching the
-server's `--api-secret`; there is no per-request identity, so the token is the
-whole access rule and must be held only by the harness task role.
+This design uses two of the seven endpoints — the full surface is in
+[the rest of the API surface](#the-rest-of-the-api-surface) below, and it is
+larger than it first appears. Authentication is the `X-Atlantis-Token` header
+matching the server's `--api-secret`; there is no per-request identity, so the
+token is the whole access rule and must be held only by the harness task role.
 
 ### Request
 
@@ -33,7 +39,7 @@ Identical for both `POST /api/plan` and `POST /api/apply`:
 ```json
 {
   "repository": "<owner>/<repo>",
-  "ref": "<branch or commit ref>",
+  "ref": "<branch name>",
   "type": "Github",
   "paths": [{ "directory": ".", "workspace": "default" }]
 }
@@ -42,11 +48,23 @@ Identical for both `POST /api/plan` and `POST /api/apply`:
 | Field | Required | Meaning |
 |---|---|---|
 | `repository` | yes | `owner/name`, and must match the server's `--repo-allowlist` |
-| `ref` | yes | Branch name or ref. For a non-branch ref, also send `base_branch` |
-| `type` | yes | `Github` or `Gitlab` |
+| `ref` | yes | **A branch name.** Fetched as `refs/heads/<branch>` |
+| `base_branch` | conditional | **Required** for a raw commit SHA, a `refs/tags/...` ref, or an ambiguous bare ref such as `prod` or `v1.2.3`. Atlantis verifies the ref is reachable from it, and evaluates repo-config branch filters and `undiverged` against it |
+| `type` | yes | `Github`, `Gitlab`, or `Gitea` |
 | `paths` | one of | `[{directory, workspace}]`; `workspace` is `"default"` when unused |
 | `projects` | one of | Named projects instead of `paths`. At least one of the two is required |
 | `PR` | no | Omit it. Omitted or `0` runs an isolated synthetic non-PR workflow, which is the mode this design uses |
+
+**Send a branch, not a commit.** Terraform applies the configuration *at the
+named revision* against current state, so applying a SHA behind the branch tip
+makes Terraform plan to destroy whatever the tip added — a silent
+infrastructure rollback. A branch cannot do that, and an agent that pushed to
+the branch is already in its history. A SHA is for deliberate pinning only, and
+then `base_branch` is mandatory.
+
+Naming a revision is not what protects the apply. That comes from Atlantis
+re-planning and re-gating on every apply, which holds whichever form of ref is
+sent.
 
 ### Response
 
@@ -142,6 +160,33 @@ structured, so the model gets prose rather than a parsed rule list.
 requires a human comment from an owner configured server-side. That is the
 property the privilege asymmetry rests on, so nothing may expose it to a
 caller.
+
+### The rest of the API surface
+
+Plan and apply are not the only endpoints, and an earlier version of this
+document wrongly said they were. Seven exist, and two matter for the threat
+model:
+
+| Endpoint | Auth | Note |
+|---|---|---|
+| `POST /api/plan`, `POST /api/apply` | token | What this design uses |
+| `POST /api/drift/detect` | token | Runs plan workflows and configured hooks |
+| `POST /api/drift/remediate` | token | **`action: "apply"` is a second destructive apply path** |
+| `GET /api/drift/remediate`, `/api/drift/remediate/{id}` | token | Remediation results |
+| `GET /api/drift/status` | token | Drift reads |
+| `GET /api/locks` | **none** | Unauthenticated. Lists held project locks |
+
+**Drift remediation must stay disabled.** `action: "apply"` requires both
+`--enable-drift-detection` and `--enable-drift-remediation`, which are off by
+default; the modules leave them off. It honors repo `apply_requirements`, and
+PR-state requirements such as `approved` fail closed for a non-PR request — but
+whether it runs the policy sets has not been verified here, so it is treated as
+an unverified apply path rather than assumed safe. Enabling it requires
+re-running the gate verification first.
+
+**`GET /api/locks` needs no token**, so the Atlantis instance must not be
+reachable beyond the control plane. Lock listings name repositories, paths, and
+workspaces.
 
 ### What the client must not assume
 
@@ -265,6 +310,10 @@ module sets both unconditionally:
 - **`--default-tf-distribution=opentofu`.** Keeps the runtime on MPL-2.0 rather
   than Terraform's BUSL-1.1, whose Additional Use Grant is a live question for
   a product that embeds it.
+
+`--enable-drift-detection` and `--enable-drift-remediation` stay **off**: together
+they open a second destructive apply path whose gating this design has not
+verified.
 
 `--write-git-creds` mutates global git configuration — on a developer machine it
 added an `insteadOf` rewrite of ssh GitHub URLs for the whole account. It is
